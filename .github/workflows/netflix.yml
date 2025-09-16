@@ -26,6 +26,6 @@ jobs:
          sudo apt-get update
          sudo apt-get install trivy -y
         #scanning files
-trivy fs.
+         
 
  
