@@ -1,42 +1,53 @@
-name: Build,Analyse,scan
+name: Build, Analyse, Scan
 
 on:
   push:
     branches:
       - main
 
-
 jobs:
-    build, analyse, scan:
-    name: Build
+  build-analyse-scan:
+    name: Build, Analyse and Scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      - uses: sonarsource/sonarqube-scan-action@master
+          fetch-depth: 0
+
+      # Optional: SonarQube Analysis
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-   
-    run:
-        #install trivy
-        sudo apt-get install wget apt-transport-https gnupg lsb-release -y
-        wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-        echo deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main | sudo tee -a /etc/apt/sources.list.d/trivy.list
-        sudo apt-get update
-        sudo apt-get install trivy -y
-        #scanning files
-        trivy fs --exit-code 1 --sev .
 
-    name: Docker Build and Push
-    run: |
-       #run commands to build and push docker images
-       docker build --build-arg TMDB_V3_API_KEY=fd513d7f049a159deda9408b1b8551b4 -t netflix .
-       docker tag netflix:latest  laoluafolami/netflix:latest
-       docker login -u username: ${{ vars.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_TOKEN }}
-       docker push laoluafolami/netflix:latest
+      # Install and Run Trivy Security Scan
+      - name: Install Trivy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update
+          sudo apt-get install -y trivy
+
+      - name: Run Trivy Filesystem Scan
+        run: |
+          trivy fs --exit-code 1 --severity CRITICAL,HIGH .
+
+      # Docker Build and Push
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to DockerHub
+        run: |
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u ${{ vars.DOCKERHUB_USERNAME }} --password-stdin
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build --build-arg TMDB_V3_API_KEY=${{ secrets.TMDB_V3_API_KEY }} -t laoluafolami/netflix:latest .
+          docker push laoluafolami/netflix:latest
+
     env:
-       Docker_CLI: 1
-
-
+      DOCKER_CLI_EXPERIMENTAL: enabled
